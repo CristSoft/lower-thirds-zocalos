@@ -2,7 +2,7 @@
 
 Plugin nativo en C++17 y Qt 6, con una fuente transparente, un panel acoplable en **Paneles** de OBS y una ventana independiente de **Diseño**. Funciona sin Python, Lua, navegador, servidor local ni obs-websocket.
 
-[Descargas y versiones](https://github.com/CristSoft/lower-thirds-zocalos/releases) · [Herramientas gráficas JCP Sur](https://herramientasgraficas.web.app/)
+[Descargas y versiones](https://github.com/CristSoft/lower-thirds-zocalos/releases) · [Herramientas Gráficas](https://herramientasgraficas.web.app/)
 
 ## Funciones
 
