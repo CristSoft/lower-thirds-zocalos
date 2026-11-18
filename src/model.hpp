@@ -2,6 +2,7 @@
 #include <QColor>
 #include <QImage>
 #include <QJsonObject>
+#include <QMap>
 #include <QStringList>
 #include <QVector>
 #include <optional>
@@ -21,14 +22,24 @@ struct Style {
 	int design = 0;
 	QColor plate{"#17120b"}, accent{"#f7a813"}, title{"#f5f6fa"}, detail{"#f7a813"};
 	QString font = "Advent Sans", icon;
-	bool showIcon = true;
+	bool showIcon = true, paletteColors = false;
 	int logo = DefaultLogo;
 	int radius = 90, transitionMs = 2200, holdSeconds = 15, iconSize = 170, maxWidth = 1440;
 	QJsonObject json() const;
 };
+struct ColorPalette {
+	QColor plate, accent, title, detail;
+	void apply(Style &style) const;
+	static ColorPalette fromStyle(const Style &style);
+	bool matches(const Style &style) const;
+	QJsonObject json() const;
+};
+const QVector<QPair<QString, ColorPalette>> &presetPalettes();
+
 struct Library {
 	QVector<Caption> captions;
 	Style style;
+	QMap<QString, ColorPalette> palettes;
 	QJsonObject json() const;
 	static std::optional<Library> parse(const QByteArray &bytes, QString &error);
 };

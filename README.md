@@ -1,4 +1,4 @@
-# Zócalos para OBS — 1.9.2
+# Zócalos para OBS — 1.9.3
 
 Plugin nativo en C++17 y Qt 6, con una fuente transparente, un panel acoplable en **Paneles** de OBS y una ventana independiente de **Diseño**. Funciona sin Python, Lua, navegador, servidor local ni obs-websocket.
 
@@ -17,7 +17,9 @@ Plugin nativo en C++17 y Qt 6, con una fuente transparente, un panel acoplable e
 - Las líneas vacías desaparecen. La placa conserva siempre el **Ancho fijo** configurado, tanto con textos cortos como largos. El texto reduce su tamaño únicamente cuando no entra en el espacio útil de la placa. Con redondeo mayor de 40 px aumenta el margen derecho de los textos; al ocultar el símbolo también se reserva espacio a la izquierda y la barra vertical termina al comienzo de la curva. El valor está expresado en píxeles del lienzo de OBS y no puede superar su ancho. Se respeta la escala de la fuente en la escena; si hace falta, se corrige su posición horizontal para que no sobresalga por la derecha.
 - Guardado automático con escritura atómica y respaldo de bibliotecas dañadas.
 
-## Cambios de la versión 1.9.2
+## Cambios de la versión 1.9.3
+
+En **Diseño > Paleta** podés elegir **ACNA**, **ANeA**, **ACSA** o **ACEA**. Cada paleta aplica un fondo oscuro, un titular claro, un tono secundario y el acento exacto del emblema. Los cuatro campos de color siguen disponibles. Usá **Guardar paleta…** para guardar la combinación actual con un nombre. Las paletas personalizadas se guardan en la biblioteca local junto con los demás ajustes. Los logotipos SVG toman el acento de la paleta y las imágenes PNG, JPG y WebP conservan sus colores. Cinta 3D usa tinta oscura cuando hace falta para mantener el contraste sobre sus placas claras.
 
 Franjas + logo, Recipiente llenado y Moderno usan las siluetas, paletas y secuencias de entrada del editor web. El texto mantiene sus proporciones y se reduce según el espacio disponible al cambiar el ancho fijo.
 
@@ -31,7 +33,7 @@ En **Diseño > Logo** podés usar el predeterminado del estilo, ocultarlo con **
 
 Requiere OBS Studio de 64 bits con Qt 6.8; se compila con SDK de OBS 31.1.1 y Qt 6.8.3. OBS proporciona las DLL de Qt.
 
-1. Cerrá OBS y ejecutá `Zocalos-OBS-v1.9.2-Instalador-Windows-x64.exe`.
+1. Cerrá OBS y ejecutá `Zocalos-OBS-v1.9.3-Instalador-Windows-x64.exe`.
 2. Aceptá la solicitud de permisos de administrador y seguí el asistente.
 3. Abrí OBS y activá **Paneles > Zócalos**. El engranaje abre **Diseño de zócalos**. Las ubicaciones guardadas se conservan al actualizar.
 
@@ -55,7 +57,7 @@ Para generarlo, primero compilar el plugin y preparar la carpeta `release`; lueg
 
 La compilación para Linux está dirigida a Ubuntu 26.04 de 64 bits con OBS Studio 32.1 o posterior instalado mediante APT. Consultá [Releases](https://github.com/CristSoft/lower-thirds-zocalos/releases) para ver qué paquetes se publicaron. El paquete `.deb` instala el plugin en las rutas del OBS de APT. Flatpak y Snap tienen sus propios entornos y rutas.
 
-Si está disponible el paquete, cerrá OBS e instalalo con `sudo apt install ./Zocalos-OBS-v1.9.2-Ubuntu-26.04-x64.deb`. Al abrir OBS, activá **Paneles > Zócalos**.
+Si está disponible el paquete, cerrá OBS e instalalo con `sudo apt install ./Zocalos-OBS-v1.9.3-Ubuntu-26.04-x64.deb`. Al abrir OBS, activá **Paneles > Zócalos**.
 
 La automatización de GitHub compila con `cmake --preset ubuntu-x86_64 -DJCP_BUILD_TESTS=ON`, ejecuta las pruebas Qt y comprueba la instalación y el enlace del módulo antes de generar el paquete de Ubuntu.
 

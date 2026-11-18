@@ -42,14 +42,47 @@ QJsonObject Style::json() const
 		{"title", title.name()}, {"detail", detail.name()},      {"font", font},
 		{"icon", icon}, {"logo", logo},          {"showIcon", showIcon},         {"iconSize", iconSize},
 		{"radius", radius},      {"transitionMs", transitionMs}, {"holdSeconds", holdSeconds},
-		{"maxWidth", maxWidth}};
+		{"maxWidth", maxWidth}, {"paletteColors", paletteColors}};
+}
+void ColorPalette::apply(Style &style) const
+{
+	style.plate = plate;
+	style.accent = accent;
+	style.title = title;
+	style.detail = detail;
+	style.paletteColors = true;
+}
+ColorPalette ColorPalette::fromStyle(const Style &style)
+{
+	return {style.plate, style.accent, style.title, style.detail};
+}
+bool ColorPalette::matches(const Style &style) const
+{
+	return plate == style.plate && accent == style.accent && title == style.title && detail == style.detail;
+}
+QJsonObject ColorPalette::json() const
+{
+	return {{"plate", plate.name()}, {"accent", accent.name()}, {"title", title.name()}, {"detail", detail.name()}};
+}
+const QVector<QPair<QString, ColorPalette>> &presetPalettes()
+{
+	static const QVector<QPair<QString, ColorPalette>> palettes = {
+		{"ACNA", {QColor("#170e0b"), QColor("#dc3200"), QColor("#f5f6fa"), QColor("#e97c5c")}},
+		{"ANeA", {QColor("#0e170b"), QColor("#448d21"), QColor("#f5f6fa"), QColor("#87b66f")}},
+		{"ACSA", {QColor("#0b1117"), QColor("#2f557f"), QColor("#f5f6fa"), QColor("#7a92ad")}},
+		{"ACEA", {QColor("#17120b"), QColor("#ffaa00"), QColor("#f5f6fa"), QColor("#ffaa00")}},
+	};
+	return palettes;
 }
 QJsonObject Library::json() const
 {
 	QJsonArray rows;
 	for (const auto &c : captions)
 		rows.append(c.json());
-	return {{"version", 1}, {"captions", rows}, {"style", style.json()}};
+	QJsonObject savedPalettes;
+	for (auto it = palettes.cbegin(); it != palettes.cend(); ++it)
+		savedPalettes.insert(it.key(), it.value().json());
+	return {{"version", 1}, {"captions", rows}, {"style", style.json()}, {"palettes", savedPalettes}};
 }
 std::optional<Library> Library::parse(const QByteArray &bytes, QString &error)
 {
@@ -113,6 +146,19 @@ std::optional<Library> Library::parse(const QByteArray &bytes, QString &error)
 	if (t.logo == ImportedLogo && t.icon.isEmpty())
 		t.logo = DefaultLogo;
 	t.showIcon = s.value("showIcon").toBool(true);
+	t.paletteColors = s.value("paletteColors").toBool(false);
+	const auto savedPalettes = root.value("palettes").toObject();
+	for (auto it = savedPalettes.constBegin(); it != savedPalettes.constEnd(); ++it) {
+		const auto values = it.value().toObject();
+		const ColorPalette palette{QColor(values.value("plate").toString()),
+					   QColor(values.value("accent").toString()),
+					   QColor(values.value("title").toString()),
+					   QColor(values.value("detail").toString())};
+		const auto name = it.key().trimmed();
+		if (!name.isEmpty() && name.size() <= 60 && palette.plate.isValid() && palette.accent.isValid() &&
+		    palette.title.isValid() && palette.detail.isValid())
+			result.palettes.insert(name, palette);
+	}
 	t.iconSize = std::clamp(s.value("iconSize").toInt(t.iconSize), 32, 196);
 	t.radius = std::clamp(s.value("radius").toInt(t.radius), 0, 98);
 	t.transitionMs = std::clamp(s.value("transitionMs").toInt(2200), 150, 5000);

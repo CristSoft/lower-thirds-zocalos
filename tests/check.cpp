@@ -528,6 +528,31 @@ int main(int argc, char **argv)
 	}
 	check(logos.size() == 5, "five distinct symbols render over the 3D ribbon");
 	{
+		jcp::Library palettes;
+		auto defaults = palettes.style;
+		const QStringList names{"ACNA", "ANeA", "ACSA", "ACEA"};
+		const QStringList accents{"#dc3200", "#448d21", "#2f557f", "#ffaa00"};
+		const auto &presets = jcp::presetPalettes();
+		check(presets.size() == names.size(), "four preset palettes");
+		for (int i = 0; i < presets.size(); ++i) {
+			presets[i].second.apply(palettes.style);
+			check(presets[i].first == names[i] && palettes.style.accent.name() == accents[i],
+			      "preset uses the exact requested logo accent");
+		}
+		palettes.style.accent = QColor("#123abc");
+		palettes.palettes.insert("Paleta personal", jcp::ColorPalette::fromStyle(palettes.style));
+		const auto roundtrip = jcp::Library::parse(QJsonDocument(palettes.json()).toJson(), error);
+		check(roundtrip && roundtrip->style.paletteColors &&
+			      roundtrip->palettes.value("Paleta personal").matches(roundtrip->style),
+		      "custom palette and manual edits survive closing OBS");
+		defaults.design = jcp::Ribbon3D;
+		auto recolored = defaults;
+		presets.front().second.apply(recolored);
+		check(renderer.render(first, defaults, .30) != renderer.render(first, recolored, .30),
+		      "palette changes the ribbon itself before the text appears");
+	}
+
+	{
 		const QColor initial("#b129d1"), replacement("#36dabc");
 		for (const auto [design, logo] : {std::pair{jcp::Classic, jcp::ChurchLogo},
 						 std::pair{jcp::Broadcast, jcp::DefaultLogo},

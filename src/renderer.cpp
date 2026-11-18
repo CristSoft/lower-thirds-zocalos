@@ -100,12 +100,13 @@ void Renderer::loadIcon(const Style &s)
 		}
 		break;
 	}
-	const QColor ink = s.design == SideCard && s.logo == DefaultLogo ? s.plate : s.accent;
-	const QColor symbolColor = s.design == GoldenTrail ? ink.lighter(150) : ink;
-	if (path == cachedPath && symbolColor.name() == cachedColor)
+	const QColor ink = !s.paletteColors && s.design == SideCard && s.logo == DefaultLogo ? s.plate : s.accent;
+	const QColor symbolColor = !s.paletteColors && s.design == GoldenTrail ? ink.lighter(150) : ink;
+	const auto colorKey = symbolColor.name() + (s.paletteColors ? "/palette" : "");
+	if (path == cachedPath && colorKey == cachedColor)
 		return;
 	cachedPath = path;
-	cachedColor = symbolColor.name();
+	cachedColor = colorKey;
 	icon = QImage(196, 196, QImage::Format_ARGB32_Premultiplied);
 	icon.fill(Qt::transparent);
 	QPainter p(&icon);
@@ -125,6 +126,10 @@ void Renderer::loadIcon(const Style &s)
 			const QSizeF size = svg.viewBoxF().size().scaled(QSizeF(196, 196), Qt::KeepAspectRatio);
 			svg.render(&p, QRectF((196 - size.width()) / 2, (196 - size.height()) / 2,
 					      size.width(), size.height()));
+			if (s.paletteColors) {
+				p.setCompositionMode(QPainter::CompositionMode_SourceIn);
+				p.fillRect(icon.rect(), symbolColor);
+			}
 		}
 	} else {
 		const QImage image(path);
@@ -255,9 +260,44 @@ QImage Renderer::renderRibbon(const Caption &c, const Style &s, double phase)
 	const double scale = w / 900.0;
 	QPainter p(&image);
 	p.setRenderHints(QPainter::SmoothPixmapTransform | QPainter::TextAntialiasing);
+	if (s.paletteColors && ribbonColor != s.plate) {
+		ribbonColor = s.plate;
+		ribbonFrames.clear();
+	}
 	const auto tile = [&](int index, const QRectF &slice, const QRectF &target) {
-		p.drawImage(QRectF(target.x() * scale, target.y(), target.width() * scale, target.height()),
-			    atlas, slice.translated((index % 8) * 900, (index / 8) * 196));
+		const int x = (index % 8) * 900, y = (index / 8) * 196;
+		const QRectF destination(target.x() * scale, target.y(), target.width() * scale, target.height());
+		if (!s.paletteColors || index >= 45) {
+			p.drawImage(destination, atlas, slice.translated(x, y));
+			return;
+		}
+		auto image = ribbonFrames.constFind(index);
+		if (image == ribbonFrames.cend()) {
+			auto frame = atlas.copy(x, y, 900, 196).convertToFormat(QImage::Format_RGBA8888);
+			const int tones[] = {ribbonColor.red(), ribbonColor.green(), ribbonColor.blue()};
+			constexpr double originalMidtone = .2126 * 116 + .7152 * 68 + .0722 * 172;
+			for (int row = 0; row < frame.height(); ++row) {
+				auto *pixel = frame.scanLine(row);
+				for (int column = 0; column < frame.width(); ++column, pixel += 4) {
+					const int purple = int(pixel[2]) - int(pixel[1]);
+					if (!pixel[3] || purple <= 5)
+						continue;
+					const double t = unit((purple - 5) / 27.0);
+					const double blend = t * t * (3 - 2 * t);
+					const double light = .2126 * pixel[0] + .7152 * pixel[1] + .0722 * pixel[2];
+					for (int channel = 0; channel < 3; ++channel) {
+						const double tone = tones[channel];
+						const double shade = light < originalMidtone
+							? tone * light / originalMidtone
+							: tone + (255 - tone) * (light - originalMidtone) / (255 - originalMidtone);
+						pixel[channel] = uchar(std::lround(pixel[channel] + (shade - pixel[channel]) * blend));
+					}
+				}
+			}
+			ribbonFrames.insert(index, std::move(frame));
+			image = ribbonFrames.constFind(index);
+		}
+		p.drawImage(destination, image.value(), slice);
 	};
 	const QRectF full(0, 0, 900, 196);
 	tile(std::clamp(int(frame) - 1, 0, 44), full, full);
@@ -308,8 +348,20 @@ QImage Renderer::renderRibbon(const Caption &c, const Style &s, double phase)
 		p.restore();
 	};
 	const Style defaults;
-	const QColor title = s.title == defaults.title ? QColor("#251145") : s.title;
-	const QColor detail = s.detail == defaults.detail ? QColor("#34210e") : s.detail;
+	// Cinta 3D keeps its white and gold Blender plates. Use dark ink when a
+	// palette's regular text color would disappear on those light surfaces.
+	const auto ribbonText = [&s](const QColor &color, double limit, const QColor &fallback) {
+		const auto luminance = [](const QColor &c) {
+			return .2126 * c.redF() + .7152 * c.greenF() + .0722 * c.blueF();
+		};
+		if (s.paletteColors && luminance(color) > limit)
+			return luminance(s.plate) <= limit ? s.plate : fallback;
+		return color;
+	};
+	const QColor title = !s.paletteColors && s.title == defaults.title
+				 ? QColor("#251145") : ribbonText(s.title, .40, QColor("#17120b"));
+	const QColor detail = !s.paletteColors && s.detail == defaults.detail
+				  ? QColor("#34210e") : ribbonText(s.detail, .32, QColor("#17120b"));
 	if (!c.lines.isEmpty())
 		draw(c.lines[0], QRectF(textLeft, 45, 802 * scale - textLeft, 75),
 		     lineFont(s, 0, 3), title, progress(46, 56));
@@ -363,13 +415,13 @@ QImage Renderer::renderWebStyle(const Caption &c, const Style &s, double phase)
 
 	Style colors = s;
 	const Style defaults;
-	if (s.plate == defaults.plate)
+	if (!s.paletteColors && s.plate == defaults.plate)
 		colors.plate = broadcast ? "#102545" : communion ? "#281e18" : modern ? "#071d30" : "#17120b";
-	if (s.title == defaults.title)
+	if (!s.paletteColors && s.title == defaults.title)
 		colors.title = communion ? "#fff9ef" : modern ? "#f5faff" : "#ffffff";
-	if (s.detail == defaults.detail)
+	if (!s.paletteColors && s.detail == defaults.detail)
 		colors.detail = broadcast ? "#ffffff" : communion ? "#f6dfbb" : modern ? "#e8f7ff" : "#17120b";
-	if (s.accent == defaults.accent && (communion || modern))
+	if (!s.paletteColors && s.accent == defaults.accent && (communion || modern))
 		colors.accent = communion ? "#d39b4e" : "#16bffa";
 	const auto &ink = colors.plate;
 	const auto &accent = colors.accent;
@@ -653,12 +705,12 @@ QImage Renderer::renderWebStyle(const Caption &c, const Style &s, double phase)
 		polygon({{0, 174}, {55, 22}, {91, 22}, {36, 174}}, accent);
 		polygon({{91, 22}, {900, 22}, {865, 108}, {60, 108}}, ink);
 		polygon({{60, 108}, {865, 108}, {861, 114}, {58, 114}}, accent);
-		polygon({{58, 114}, {861, 114}, {839, 174}, {36, 174}}, colors.title);
+		polygon({{58, 114}, {861, 114}, {839, 174}, {36, 174}}, s.paletteColors ? ink : colors.title);
 	}
 	p.restore();
 
 	if (s.showIcon) {
-		if (broadcast || modern) {
+		if (!s.paletteColors && (broadcast || modern)) {
 			// Keep the web palette's light default emblem until the accent is customized.
 			if ((s.logo == DefaultLogo && s.accent == defaults.accent) ||
 			    (s.logo != DefaultLogo && s.logo != ChurchLogo))
@@ -782,7 +834,8 @@ QImage Renderer::render(const Caption &c, const Style &s, double phase)
 		if (s.design == BottomBar || s.design == DoubleBar)
 			p.drawRoundedRect(QRectF(left, lowerY, textWidth, s.design == DoubleBar ? 4 : 7), 2, 2);
 		if (s.design == SideCard)
-			p.fillRect(QRectF(0, 0, s.showIcon ? 196 : std::max(60.0, radius + 20), 196), s.accent);
+			p.fillRect(QRectF(0, 0, s.showIcon ? 196 : std::max(60.0, radius + 20), 196),
+				   s.paletteColors ? s.plate.lighter(150) : s.accent);
 		if (s.design == Outline) {
 			p.setBrush(Qt::NoBrush);
 			p.setPen(QPen(s.accent, 2));

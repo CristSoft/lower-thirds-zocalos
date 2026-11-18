@@ -14,6 +14,7 @@
 #include <QFrame>
 #include <QHBoxLayout>
 #include <QImageReader>
+#include <QInputDialog>
 #include <QMessageBox>
 #include <QMainWindow>
 #include <QMenu>
@@ -1124,7 +1125,41 @@ QWidget *Controller::makeDesignPanel()
 		library.style.design = i;
 		changed();
 	});
-	auto color = [this, form](const QString &label, const QString &key, QColor Style::*member) {
+	auto *paletteChoice = new QComboBox;
+	paletteChoice->setObjectName("palette-choice");
+	auto *paletteRow = new QWidget;
+	auto *paletteActions = new QHBoxLayout(paletteRow);
+	paletteActions->setContentsMargins(0, 0, 0, 0);
+	auto *savePalette = new QPushButton("Guardar paleta…");
+	auto *removePalette = new QPushButton("Eliminar paleta");
+	paletteActions->addWidget(savePalette);
+	paletteActions->addWidget(removePalette);
+	form->addRow("Paleta", paletteChoice);
+	form->addRow(paletteRow);
+	const auto refreshPalettes = [this, paletteChoice, removePalette](const QString &selected = {}) {
+		const QSignalBlocker blocker(paletteChoice);
+		paletteChoice->clear();
+		paletteChoice->addItem("Colores manuales", QString());
+		int active = 0;
+		for (const auto &entry : presetPalettes()) {
+			paletteChoice->addItem(entry.first, "preset:" + entry.first);
+			if (library.style.paletteColors && entry.second.matches(library.style))
+				active = paletteChoice->count() - 1;
+		}
+		for (auto it = library.palettes.cbegin(); it != library.palettes.cend(); ++it) {
+			paletteChoice->addItem(it.key() + " · Personalizada", "custom:" + it.key());
+			if (!active && library.style.paletteColors && it.value().matches(library.style))
+				active = paletteChoice->count() - 1;
+		}
+		const int explicitIndex = selected.isEmpty() ? -1 : paletteChoice->findData(selected);
+		paletteChoice->setCurrentIndex(explicitIndex >= 0 ? explicitIndex : active);
+		removePalette->setEnabled(paletteChoice->currentData().toString().startsWith("custom:"));
+	};
+	refreshPalettes();
+	using RefreshColor = std::function<void()>;
+	QVector<RefreshColor> refreshColors;
+	auto color = [this, form, paletteChoice, removePalette, &refreshColors](
+			     const QString &label, const QString &key, QColor Style::*member) {
 		auto *row = new QWidget;
 		auto *layout = new QHBoxLayout(row);
 		layout->setContentsMargins(0, 0, 0, 0);
@@ -1156,12 +1191,25 @@ QWidget *Controller::makeDesignPanel()
 				"QToolButton { background-color:" + value +
 				";border:1px solid palette(mid);border-radius:3px; } QToolButton:focus { border:2px solid palette(text); }");
 		};
-		swatch();
+		const auto refresh = [this, input, member, swatch] {
+			const QSignalBlocker blocker(input);
+			input->setText((library.style.*member).name().toUpper());
+			input->setProperty("invalidColor", false);
+			input->setStyleSheet("");
+			input->setToolTip("Color hexadecimal, por ejemplo #FFFFFF");
+			swatch();
+		};
+		refresh();
+		refreshColors.append(refresh);
 		connect(input, &QLineEdit::textChanged, this,
-			[this, input, member, parse, swatch](const QString &text) {
+			[this, input, member, parse, swatch, paletteChoice, removePalette](const QString &text) {
 				const auto value = parse(text);
 				if (!value.isValid())
 					return;
+				if (library.style.*member != value) {
+					paletteChoice->setCurrentIndex(0);
+					removePalette->setEnabled(false);
+				}
 				library.style.*member = value;
 				input->setProperty("invalidColor", false);
 				input->setStyleSheet("");
@@ -1191,6 +1239,70 @@ QWidget *Controller::makeDesignPanel()
 	color("Acento e ícono", "accent", &Style::accent);
 	color("Primera línea", "title", &Style::title);
 	color("Líneas 2 y 3", "detail", &Style::detail);
+	connect(paletteChoice, &QComboBox::currentIndexChanged, this,
+		[this, paletteChoice, removePalette, refreshColors] {
+			const QString id = paletteChoice->currentData().toString();
+			const bool custom = id.startsWith("custom:");
+			removePalette->setEnabled(custom);
+			if (custom) {
+				const auto it = library.palettes.constFind(id.mid(7));
+				if (it == library.palettes.cend())
+					return;
+				it.value().apply(library.style);
+			} else {
+				const auto &presets = presetPalettes();
+				const auto it = std::find_if(presets.cbegin(), presets.cend(),
+							     [&id](const auto &item) { return id == "preset:" + item.first; });
+				if (it == presets.cend())
+					return;
+				it->second.apply(library.style);
+			}
+			for (const auto &refresh : refreshColors)
+				refresh();
+			changed();
+		});
+	connect(savePalette, &QPushButton::clicked, this, [this, paletteChoice, refreshPalettes] {
+		const QString id = paletteChoice->currentData().toString();
+		bool accepted = false;
+		const auto name = QInputDialog::getText(paletteChoice->window(), "Guardar paleta", "Nombre de la paleta",
+						       QLineEdit::Normal, id.startsWith("custom:") ? id.mid(7) : QString(),
+						       &accepted).trimmed();
+		if (!accepted)
+			return;
+		if (name.isEmpty() || name.size() > 60) {
+			QMessageBox::warning(paletteChoice->window(), "Guardar paleta",
+					     "Escribí un nombre de entre 1 y 60 caracteres.");
+			return;
+		}
+		const auto names = library.palettes.keys();
+		const auto existing = std::find_if(names.cbegin(), names.cend(), [&name](const QString &item) {
+			return item.compare(name, Qt::CaseInsensitive) == 0;
+		});
+		if (existing != names.cend()) {
+			if (QMessageBox::question(paletteChoice->window(), "Actualizar paleta",
+						  "¿Actualizar la paleta «" + *existing + "»?",
+						  QMessageBox::Yes | QMessageBox::No, QMessageBox::No) != QMessageBox::Yes)
+				return;
+			library.palettes.remove(*existing);
+		}
+		library.palettes.insert(name, ColorPalette::fromStyle(library.style));
+		library.style.paletteColors = true;
+		refreshPalettes("custom:" + name);
+		changed();
+	});
+	connect(removePalette, &QPushButton::clicked, this, [this, paletteChoice, refreshPalettes] {
+		const QString id = paletteChoice->currentData().toString();
+		if (!id.startsWith("custom:"))
+			return;
+		const auto name = id.mid(7);
+		if (QMessageBox::question(paletteChoice->window(), "Eliminar paleta",
+					  "¿Eliminar la paleta «" + name + "»?",
+					  QMessageBox::Yes | QMessageBox::No, QMessageBox::No) != QMessageBox::Yes)
+			return;
+		library.palettes.remove(name);
+		refreshPalettes();
+		changed();
+	});
 	auto *font = new QFontComboBox;
 	font->setCurrentFont(QFont(library.style.font));
 	form->addRow("Tipografía", font);

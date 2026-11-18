@@ -1,4 +1,4 @@
-﻿#define PluginVersion "1.9.2"
+﻿#define PluginVersion "1.9.3"
 [Setup]
 AppId={{DC2EC01D-3BF6-48BF-BB66-0B902934F8B4}
 AppName=Zócalos para OBS
