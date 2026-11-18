@@ -381,11 +381,15 @@ int main(int argc, char **argv)
 			const auto inkHeight = [&](int fixedWidth) {
 				fit.maxWidth = fixedWidth;
 				const auto frame = renderer.render(longText, fit, 1);
+				// Compare two subtitle colors to locate the glyphs without depending on
+				// platform-specific font antialiasing or a minimum pixel opacity.
+				auto comparison = fit;
+				comparison.detail = QColor("#23ff31");
+				const auto other = renderer.render(longText, comparison, 1);
 				int firstRow = 196, lastRow = -1;
 				for (int y = 0; y < frame.height(); ++y) {
 					for (int x = 0; x < frame.width(); ++x) {
-						const auto pixel = frame.pixelColor(x, y);
-						if (pixel.red() > 210 && pixel.green() < 100 && pixel.blue() > 155) {
+						if (frame.pixel(x, y) != other.pixel(x, y)) {
 							firstRow = std::min(firstRow, y);
 							lastRow = y;
 							break;
