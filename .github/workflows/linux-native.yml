@@ -20,7 +20,7 @@ jobs:
           apt-get update
           apt-get install -y --no-install-recommends ca-certificates git g++ cmake ninja-build pkg-config jq \
             obs-studio libobs-dev libsimde-dev qt6-base-dev qt6-svg-dev libgl-dev libx11-dev libwayland-dev \
-            binutils dpkg-dev fonts-dejavu-core
+            binutils dpkg-dev file fonts-dejavu-core
       - uses: actions/checkout@v4
       - name: Build and test
         run: |
@@ -38,6 +38,7 @@ jobs:
             -D CPACK_DEBIAN_DEBUGINFO_PACKAGE=OFF \
             -D CPACK_PACKAGING_INSTALL_PREFIX=/usr \
             -D CPACK_INSTALL_PREFIX=/usr
+          dpkg-deb --contents "release/$package.deb"
           dpkg -i "release/$package.deb"
           plugin=/usr/lib/x86_64-linux-gnu/obs-plugins/jcp-sur-lower-thirds.so
           test -f "$plugin"
