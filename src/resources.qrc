@@ -1,0 +1,9 @@
+<RCC><qresource prefix="/jcp"><file>emblem.svg</file><file>play.svg</file><file>trail-note.svg</file><file alias="AdventSans-Logo.otf">../data/fonts/AdventSans-Logo.otf</file>
+  <file>web-art/bible.svg</file>
+  <file>web-art/communion.svg</file>
+  <file>web-art/crown.svg</file>
+  <file>web-art/hymn-3d.png</file>
+  <file>web-art/isotipo-iglesia.svg</file>
+  <file>web-art/music.svg</file>
+  <file>web-art/simbolo-circular-oficial.svg</file>
+</qresource></RCC>

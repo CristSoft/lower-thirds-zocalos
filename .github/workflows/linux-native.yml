@@ -1,0 +1,51 @@
+name: Native Linux plugin
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  ubuntu:
+    runs-on: ubuntu-24.04
+    container: ubuntu:26.04
+    env:
+      DEBIAN_FRONTEND: noninteractive
+    steps:
+      - name: Install OBS and build dependencies
+        run: |
+          apt-get update
+          apt-get install -y --no-install-recommends ca-certificates git g++ cmake ninja-build pkg-config jq \
+            obs-studio libobs-dev libsimde-dev qt6-base-dev qt6-svg-dev libgl-dev libx11-dev libwayland-dev \
+            binutils dpkg-dev fonts-dejavu-core
+      - uses: actions/checkout@v4
+      - name: Build and test
+        run: |
+          cmake --preset ubuntu-x86_64 -DJCP_BUILD_TESTS=ON
+          cmake --build --preset ubuntu-x86_64 --parallel 2
+          ctest --test-dir build_x86_64 --output-on-failure
+      - name: Package and verify the install
+        run: |
+          version=$(jq -r .version buildspec.json)
+          package="Zocalos-OBS-v${version}-Ubuntu-26.04-x64"
+          cpack --config build_x86_64/CPackConfig.cmake -B release \
+            -D "CPACK_PACKAGE_FILE_NAME=$package" \
+            -D 'CPACK_DEBIAN_PACKAGE_MAINTAINER=CristSoft' \
+            -D 'CPACK_DEBIAN_PACKAGE_DEPENDS=obs-studio (>= 32.1)' \
+            -D CPACK_DEBIAN_DEBUGINFO_PACKAGE=OFF \
+            -D CPACK_PACKAGING_INSTALL_PREFIX=/usr \
+            -D CPACK_INSTALL_PREFIX=/usr
+          dpkg -i "release/$package.deb"
+          plugin=/usr/lib/x86_64-linux-gnu/obs-plugins/jcp-sur-lower-thirds.so
+          test -f "$plugin"
+          test -f /usr/share/obs/obs-plugins/jcp-sur-lower-thirds/locale/es-ES.ini
+          ldd -r "$plugin" > plugin-linkage.txt 2>&1
+          cat plugin-linkage.txt
+          if grep -E 'not found|undefined symbol' plugin-linkage.txt; then exit 1; fi
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Zocalos-OBS-Ubuntu-26.04-x64
+          path: release/Zocalos-OBS-*.deb
+          if-no-files-found: error

@@ -54,21 +54,43 @@ function(_setup_obs_studio)
 
   if(OS_WINDOWS)
     set(_cmake_generator "${CMAKE_GENERATOR}")
-    set(_cmake_arch "-A ${arch},version=${CMAKE_VS_WINDOWS_TARGET_PLATFORM_VERSION}")
-    set(_cmake_extra "-DCMAKE_SYSTEM_VERSION=${CMAKE_SYSTEM_VERSION} -DCMAKE_ENABLE_SCRIPTING=OFF")
+    set(_cmake_arch -A "${arch},version=${CMAKE_VS_WINDOWS_TARGET_PLATFORM_VERSION}")
+    set(_cmake_extra "-DCMAKE_SYSTEM_VERSION=${CMAKE_SYSTEM_VERSION}" "-DENABLE_SCRIPTING=OFF")
   elseif(OS_MACOS)
     set(_cmake_generator "Xcode")
     set(_cmake_arch "-DCMAKE_OSX_ARCHITECTURES:STRING='arm64;x86_64'")
     set(_cmake_extra "-DCMAKE_OSX_DEPLOYMENT_TARGET=${CMAKE_OSX_DEPLOYMENT_TARGET}")
   endif()
 
+  # Reuse dependencies already verified by the parent project. OBS otherwise
+  # downloads the same archives again into its own nested .deps directory.
+  file(READ "${dependencies_dir}/${_obs_destination}/buildspec.json" _obs_buildspec)
+  file(READ "${CMAKE_CURRENT_SOURCE_DIR}/buildspec.json" _plugin_buildspec)
+  # OBS 31.1.1 sets `found` in the parent scope, then return(PROPAGATE)
+  # overwrites that result with its inherited local value. Keep it local until
+  # propagation so an existing SDK actually suppresses redundant downloads.
+  set(_sdk_dependency_helper "${dependencies_dir}/${_obs_destination}/cmake/common/buildspec_common.cmake")
+  file(READ "${_sdk_dependency_helper}" _sdk_helper_original)
+  string(REPLACE "set(found FALSE PARENT_SCOPE)" "set(found FALSE)" _sdk_helper_fixed "${_sdk_helper_original}")
+  string(REPLACE "set(found TRUE PARENT_SCOPE)" "set(found TRUE)" _sdk_helper_fixed "${_sdk_helper_fixed}")
+  if(NOT _sdk_helper_fixed STREQUAL _sdk_helper_original)
+    file(WRITE "${_sdk_dependency_helper}" "${_sdk_helper_fixed}")
+  endif()
+  foreach(_dep IN ITEMS prebuilt qt6)
+    string(JSON _source_hash ERROR_VARIABLE _source_error GET "${_obs_buildspec}" dependencies ${_dep} hashes ${platform})
+    string(JSON _parent_hash ERROR_VARIABLE _parent_error GET "${_plugin_buildspec}" dependencies ${_dep} hashes ${platform})
+    if(NOT _source_error AND NOT _parent_error AND _source_hash STREQUAL _parent_hash)
+      list(APPEND _cmake_extra "-DOBS_DEPENDENCY_${_dep}_${arch}_HASH:STRING=${_parent_hash}")
+    endif()
+  endforeach()
+
   message(STATUS "Configure ${label} (${arch})")
   execute_process(
     COMMAND
       "${CMAKE_COMMAND}" -S "${dependencies_dir}/${_obs_destination}" -B
-      "${dependencies_dir}/${_obs_destination}/build_${arch}" -G ${_cmake_generator} "${_cmake_arch}"
+      "${dependencies_dir}/${_obs_destination}/build_${arch}" -G ${_cmake_generator} ${_cmake_arch}
       -DOBS_CMAKE_VERSION:STRING=3.0.0 -DENABLE_PLUGINS:BOOL=OFF -DENABLE_FRONTEND:BOOL=OFF
-      -DOBS_VERSION_OVERRIDE:STRING=${_obs_version} "-DCMAKE_PREFIX_PATH='${CMAKE_PREFIX_PATH}'" ${_is_fresh}
+      -DOBS_VERSION_OVERRIDE:STRING=${_obs_version} "-DCMAKE_PREFIX_PATH=${CMAKE_PREFIX_PATH}" ${_is_fresh}
       ${_cmake_extra}
     RESULT_VARIABLE _process_result
     COMMAND_ERROR_IS_FATAL ANY

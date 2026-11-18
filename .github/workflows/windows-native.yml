@@ -1,0 +1,23 @@
+name: Native Windows plugin
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  build:
+    runs-on: windows-2022
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Compile, verify and package
+        shell: pwsh
+        run: ./build-windows.ps1 -Configuration Release
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Plugin-OBS-JCP-Sur-Windows-x64
+          path: release/
+          if-no-files-found: error
